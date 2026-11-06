@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Price Ranker</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1b1f24; --muted: #667085; --border: #e3e6ea;
+    --accent: #2563eb; --accent-soft: #e8efff; --good: #15803d; --good-soft: #e7f6ec;
+    --bad: #b42318; --bad-soft: #fdecea; --warn: #a15c07; --warn-soft: #fff4e0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1216; --panel: #171b21; --text: #e6e8eb; --muted: #98a2b3; --border: #2a3038;
+      --accent: #6b9cff; --accent-soft: #1c2a47; --good: #4ade80; --good-soft: #12301f;
+      --bad: #f97066; --bad-soft: #3a1a17; --warn: #fbbf24; --warn-soft: #3a2c0e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background: var(--bg); color: var(--text); }
+  header { padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--panel);
+           display: flex; align-items: baseline; gap: 12px; }
+  header h1 { margin: 0; font-size: 18px; }
+  header span { color: var(--muted); }
+  .layout { display: grid; grid-template-columns: 260px 1fr; min-height: calc(100vh - 53px); }
+  aside { border-right: 1px solid var(--border); background: var(--panel); padding: 14px; }
+  main { padding: 20px; min-width: 0; }
+  @media (max-width: 760px) { .layout { grid-template-columns: 1fr; } aside { border-right: 0; border-bottom: 1px solid var(--border); } }
+
+  input, button { font: inherit; }
+  input { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg);
+          color: var(--text); min-width: 0; }
+  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel);
+           color: var(--text); cursor: pointer; white-space: nowrap; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.link { border: 0; background: none; padding: 2px 6px; color: var(--muted); }
+  button.link:hover { color: var(--accent); }
+  button:disabled { opacity: .55; cursor: wait; }
+
+  .new-product { display: flex; gap: 6px; margin-bottom: 14px; }
+  .new-product input { flex: 1; }
+  .plist { list-style: none; margin: 0; padding: 0; }
+  .plist li { padding: 9px 10px; border-radius: 8px; cursor: pointer; display: flex; justify-content: space-between; gap: 8px; }
+  .plist li:hover { background: var(--bg); }
+  .plist li.active { background: var(--accent-soft); }
+  .plist small { color: var(--muted); }
+  .empty { color: var(--muted); padding: 30px 0; text-align: center; }
+
+  .top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+  .top h2 { margin: 0; font-size: 20px; flex: 1; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+  .stat small { color: var(--muted); display: block; }
+  .stat b { font-size: 20px; }
+  .stat.best b { color: var(--good); }
+
+  .add { display: flex; gap: 8px; flex-wrap: wrap; }
+  .add input.url { flex: 1 1 320px; }
+  .add input.small { width: 110px; }
+  .add input.site { flex: 0 1 180px; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  .toggle { margin-top: 8px; }
+
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.winner td { background: var(--good-soft); }
+  .rank { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%;
+          background: var(--bg); font-weight: 600; }
+  tr.winner .rank { background: var(--good); color: #fff; }
+  .site a { color: var(--text); font-weight: 600; text-decoration: none; }
+  .site a:hover { color: var(--accent); }
+  .title { color: var(--muted); font-size: 12px; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 99px; margin-left: 4px; }
+  .tag.good { background: var(--good-soft); color: var(--good); }
+  .tag.bad { background: var(--bad-soft); color: var(--bad); }
+  .tag.warn { background: var(--warn-soft); color: var(--warn); }
+  .tag.muted { background: var(--bg); color: var(--muted); }
+  .diff.up { color: var(--bad); }
+  .err { color: var(--warn); font-size: 12px; }
+  .total { font-weight: 700; }
+  svg.spark { display: block; }
+  .actions { white-space: nowrap; text-align: right; }
+  .banner { background: var(--warn-soft); color: var(--warn); padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; }
+  .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg);
+           padding: 10px 14px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: .95; }
+</style>
+</head>
+<body>
+<header><h1>Price Ranker</h1><span>Compare one product across any websites</span></header>
+<div class="layout">
+  <aside>
+    <form class="new-product" id="newProduct">
+      <input id="newName" placeholder="New comparison, e.g. AirPods Pro 2" required>
+      <button class="primary">Add</button>
+    </form>
+    <ul class="plist" id="plist"></ul>
+  </aside>
+  <main id="main"><div class="empty">Create a comparison on the left to get started.</div></main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let products = [], current = null;
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts,
+                                  body: opts.body ? JSON.stringify(opts.body) : undefined });
+  if (res.status === 204) return null;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const d = data.detail;
+    throw new Error(Array.isArray(d) ? d.map(x => x.msg).join("; ") : d || res.statusText);
+  }
+  return data;
+}
+
+function toast(msg) {
+  const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 3000);
+}
+
+function money(v, cur) {
+  if (v == null) return "—";
+  try { return new Intl.NumberFormat(undefined, { style: "currency", currency: cur || "USD" }).format(v); }
+  catch { return (cur ? cur + " " : "") + v.toFixed(2); }
+}
+
+function ago(iso) {
+  if (!iso) return "";
+  const s = (Date.now() - new Date(iso)) / 1000;
+  if (s < 60) return "just now";
+  if (s < 3600) return Math.floor(s / 60) + "m ago";
+  if (s < 86400) return Math.floor(s / 3600) + "h ago";
+  return Math.floor(s / 86400) + "d ago";
+}
+
+function spark(hist) {
+  if (!hist || hist.length < 2) return `<span class="tag muted">${hist?.length ? "1 check" : "—"}</span>`;
+  const ps = hist.map(h => h.price), min = Math.min(...ps), max = Math.max(...ps), w = 80, h = 24;
+  const pts = ps.map((p, i) => `${(i / (ps.length - 1) * w).toFixed(1)},${(max === min ? h / 2 : h - 2 - (p - min) / (max - min) * (h - 4)).toFixed(1)}`).join(" ");
+  const trend = ps.at(-1) < ps[0] ? "var(--good)" : ps.at(-1) > ps[0] ? "var(--bad)" : "var(--muted)";
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-label="price history">
+    <title>Low ${min} · High ${max} · ${ps.length} checks</title>
+    <polyline fill="none" stroke="${trend}" stroke-width="1.8" points="${pts}"/></svg>`;
+}
+
+// ---------------------------------------------------------------- sidebar
+async function loadProducts() {
+  products = await api("/api/products");
+  const ul = $("#plist");
+  if (!products.length) { ul.innerHTML = `<li class="empty" style="cursor:default">No comparisons yet</li>`; return; }
+  ul.innerHTML = products.map(p => `
+    <li data-id="${p.id}" class="${current?.id === p.id ? "active" : ""}">
+      <span>${esc(p.name)}<br><small>${p.listing_count} site${p.listing_count === 1 ? "" : "s"}</small></span>
+      <small>${p.best_total != null ? money(p.best_total) : ""}</small>
+    </li>`).join("");
+  ul.querySelectorAll("li[data-id]").forEach(li => li.onclick = () => openProduct(+li.dataset.id));
+}
+
+$("#newProduct").onsubmit = async e => {
+  e.preventDefault();
+  const name = $("#newName").value.trim(); if (!name) return;
+  const p = await api("/api/products", { method: "POST", body: { name } });
+  $("#newName").value = "";
+  await openProduct(p.id);
+};
+
+// ---------------------------------------------------------------- main panel
+async function openProduct(id) {
+  current = await api(`/api/products/${id}`);
+  localStorage.setItem("lastProduct", id);
+  render(); loadProducts();
+}
+
+function render() {
+  const p = current, cur = p.currency;
+  const priced = p.listings.filter(l => l.total != null);
+  const winner = priced.find(l => l.in_stock !== 0);
+  const savings = p.max_total != null && p.best_total != null ? p.max_total - p.best_total : null;
+
+  $("#main").innerHTML = `
+    <div class="top">
+      <h2>${esc(p.name)}</h2>
+      <button id="refreshAll" ${p.listings.some(l => l.url) ? "" : "disabled"}>↻ Refresh all prices</button>
+      <button class="link" id="rename">Rename</button>
+      <button class="link" id="delProduct">Delete</button>
+    </div>
+
+    ${priced.length ? `<div class="card summary">
+      <div class="stat best"><small>Best price</small><b>${money(p.best_total, cur)}</b><div>${esc(winner?.site ?? "")}</div></div>
+      <div class="stat"><small>Highest price</small><b>${money(p.max_total, cur)}</b></div>
+      <div class="stat"><small>You save vs highest</small><b>${money(savings, cur)}</b>
+        <div>${p.max_total ? Math.round(100 * savings / p.max_total) : 0}%</div></div>
+      <div class="stat"><small>Sites compared</small><b>${p.listings.length}</b></div>
+    </div>` : ""}
+
+    <div class="card">
+      <form class="add" id="addForm">
+        <input class="url" id="url" placeholder="Paste a product link from any store (Amazon, Walmart, eBay, Best Buy, any shop…)">
+        <input class="site" id="site" placeholder="Site name" hidden>
+        <input class="small" id="price" type="number" step="0.01" min="0" placeholder="Price" hidden>
+        <input class="small" id="ship" type="number" step="0.01" min="0" placeholder="Shipping">
+        <button class="primary" id="addBtn">Add &amp; check price</button>
+      </form>
+      <div class="hint" id="addHint">The price is read automatically from the page. Shipping is optional and gets added to the total.</div>
+      <button class="link toggle" id="manualToggle">Enter a price manually instead</button>
+    </div>
+
+    ${p.mixed_currency ? `<div class="banner">These listings use different currencies, so the ranking compares raw numbers without converting them.</div>` : ""}
+
+    <div class="card table-wrap">
+      ${p.listings.length ? `<table>
+        <thead><tr><th>#</th><th>Site</th><th class="num">Price</th><th class="num">Shipping</th>
+          <th class="num">Total</th><th class="num">vs best</th><th>History</th><th>Checked</th><th></th></tr></thead>
+        <tbody>${p.listings.map(l => row(l, winner)).join("")}</tbody></table>`
+        : `<div class="empty">No sites yet. Paste a product link above.</div>`}
+    </div>`;
+
+  bindMain();
+}
+
+function row(l, winner) {
+  const c = l.currency || current.currency;
+  const stock = l.in_stock === 0 ? `<span class="tag bad">out of stock</span>`
+              : l.in_stock === 1 ? `<span class="tag good">in stock</span>` : "";
+  const how = l.manual ? `<span class="tag muted">manual</span>` : "";
+  const diff = l.diff == null ? "—" : l.diff === 0 ? `<span class="tag good">best</span>`
+             : `<span class="diff up">+${money(l.diff, c)} (${l.diff_pct}%)</span>`;
+  return `<tr class="${winner && l.id === winner.id ? "winner" : ""}" data-id="${l.id}">
+    <td>${l.rank ? `<span class="rank">${l.rank}</span>` : ""}</td>
+    <td class="site">
+      ${l.url ? `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.site)}</a>` : `<b>${esc(l.site)}</b>`}${stock}${how}
+      ${l.title ? `<div class="title" title="${esc(l.title)}">${esc(l.title)}</div>` : ""}
+      ${l.error ? `<div class="err">⚠ ${esc(l.error)}</div>` : ""}
+    </td>
+    <td class="num">${money(l.price, c)}</td>
+    <td class="num">${l.shipping ? money(l.shipping, c) : (l.price != null ? "free" : "—")}</td>
+    <td class="num total">${money(l.total, c)}</td>
+    <td class="num">${diff}</td>
+    <td>${spark(l.history)}</td>
+    <td><small>${ago(l.last_checked)}</small></td>
+    <td class="actions">
+      ${l.url ? `<button class="link" data-act="refresh" title="Re-check price">↻</button>` : ""}
+      <button class="link" data-act="edit" title="Set price / shipping">✎</button>
+      <button class="link" data-act="del" title="Remove">✕</button>
+    </td></tr>`;
+}
+
+function bindMain() {
+  let manual = false;
+  $("#manualToggle").onclick = () => {
+    manual = !manual;
+    $("#site").hidden = $("#price").hidden = !manual;
+    $("#url").placeholder = manual ? "Product link (optional)" : "Paste a product link from any store (Amazon, Walmart, eBay, Best Buy, any shop…)";
+    $("#addBtn").innerHTML = manual ? "Add price" : "Add &amp; check price";
+    $("#manualToggle").textContent = manual ? "Read the price from a link instead" : "Enter a price manually instead";
+    $("#addHint").textContent = manual ? "Type the site name and price you see. Add the link too if you want automatic refreshes later." : "The price is read automatically from the page. Shipping is optional and gets added to the total.";
+  };
+
+  $("#addForm").onsubmit = async e => {
+    e.preventDefault();
+    const body = { url: $("#url").value.trim() || null, shipping: parseFloat($("#ship").value) || 0 };
+    if (manual) { body.site = $("#site").value.trim(); body.price = parseFloat($("#price").value) || null; }
+    if (!body.url && !manual) return toast("Paste a product link first");
+    const btn = $("#addBtn"); btn.disabled = true; btn.textContent = manual ? "Adding…" : "Checking price…";
+    try {
+      current = await api(`/api/products/${current.id}/listings`, { method: "POST", body });
+      const added = current.listings.reduce((a, b) => (a.id > b.id ? a : b));
+      toast(added.error ? "Added, but the price couldn't be read. Click ✎ to enter it" : `Added ${added.site}: ${money(added.price, added.currency)}`);
+      render(); loadProducts();
+    } catch (err) { toast(err.message); btn.disabled = false; btn.textContent = "Try again"; }
+  };
+
+  $("#refreshAll").onclick = async e => {
+    e.target.disabled = true; e.target.textContent = "Checking every site…";
+    try { current = await api(`/api/products/${current.id}/refresh`, { method: "POST" }); toast("Prices refreshed"); }
+    catch (err) { toast(err.message); }
+    render(); loadProducts();
+  };
+
+  $("#rename").onclick = async () => {
+    const name = prompt("Rename comparison", current.name);
+    if (!name?.trim()) return;
+    current = await api(`/api/products/${current.id}`, { method: "PATCH", body: { name: name.trim() } });
+    render(); loadProducts();
+  };
+
+  $("#delProduct").onclick = async () => {
+    if (!confirm(`Delete "${current.name}" and all its prices?`)) return;
+    await api(`/api/products/${current.id}`, { method: "DELETE" });
+    current = null; localStorage.removeItem("lastProduct");
+    $("#main").innerHTML = `<div class="empty">Comparison deleted.</div>`;
+    loadProducts();
+  };
+
+  document.querySelectorAll("tr[data-id] button[data-act]").forEach(b => b.onclick = async () => {
+    const id = +b.closest("tr").dataset.id, l = current.listings.find(x => x.id === id);
+    try {
+      if (b.dataset.act === "refresh") {
+        b.disabled = true; b.textContent = "…";
+        current = await api(`/api/listings/${id}/refresh`, { method: "POST" });
+      } else if (b.dataset.act === "del") {
+        if (!confirm(`Remove ${l.site}?`)) return;
+        current = await api(`/api/listings/${id}`, { method: "DELETE" });
+      } else {
+        const price = prompt(`Price at ${l.site}`, l.price ?? ""); if (price === null) return;
+        const ship = prompt(`Shipping at ${l.site} (0 = free)`, l.shipping ?? 0); if (ship === null) return;
+        const body = {};
+        if (price.trim() !== "" && parseFloat(price) > 0) body.price = parseFloat(price);
+        if (ship.trim() !== "") body.shipping = Math.max(0, parseFloat(ship) || 0);
+        current = await api(`/api/listings/${id}`, { method: "PATCH", body });
+      }
+      render(); loadProducts();
+    } catch (err) { toast(err.message); render(); }
+  });
+}
+
+// ---------------------------------------------------------------- boot
+(async () => {
+  await loadProducts();
+  let last = null; try { last = +localStorage.getItem("lastProduct"); } catch {}
+  const pick = products.find(p => p.id === last) || products[0];
+  if (pick) openProduct(pick.id);
+})();
+</script>
+</body>
+</html>
